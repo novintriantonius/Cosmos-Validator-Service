@@ -169,5 +169,8 @@ func (s *CosmosService) RetrieveDelegations(ctx context.Context, validatorAddres
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 	
+	// Add timestamp
+	delegationsResp.Timestamp = time.Now()
+	
 	return &delegationsResp, nil
 } 

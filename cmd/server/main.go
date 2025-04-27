@@ -1,13 +1,19 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
+	"time"
 
-	"github.com/novintriantonius/cosmos-validator-service/internal/handlers"
+	"github.com/novintriantonius/cosmos-validator-service/internal/routes"
+	"github.com/novintriantonius/cosmos-validator-service/internal/scheduler"
+	"github.com/novintriantonius/cosmos-validator-service/internal/services"
 	"github.com/novintriantonius/cosmos-validator-service/internal/store"
 )
 
@@ -30,19 +36,52 @@ func NewConfig() *Config {
 }
 
 func main() {
-	// Initialize configuration
-	cfg := NewConfig()
-	
-	// Initialize validator store
+	// Initialize stores
 	validatorStore := store.NewInMemoryValidatorStore()
+	delegationStore := store.NewInMemoryDelegationStore()
 	
-	// Setup router
-	router := handlers.SetupRouter(validatorStore)
+	// Initialize cosmos service
+	cosmosService := services.NewCosmosService()
 	
-	// Start server
-	addr := fmt.Sprintf(":%d", cfg.ServerPort)
-	log.Printf("Starting server on %s", addr)
-	if err := http.ListenAndServe(addr, router); err != nil {
-		log.Fatalf("Server failed to start: %v", err)
+	// Set up router with all dependencies
+	router := routes.SetupRouter(validatorStore, cosmosService)
+	
+	// Initialize and setup scheduler with all tasks
+	sched := scheduler.SetupScheduler(validatorStore, delegationStore, cosmosService)
+	
+	// Start the scheduler
+	sched.Start()
+	defer sched.Stop()
+	
+	// Create HTTP server
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", NewConfig().ServerPort),
+		Handler: router,
 	}
+	
+	// Start the server in a goroutine
+	go func() {
+		log.Printf("Starting server on %s", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server error: %v", err)
+		}
+	}()
+	
+	// Wait for interrupt signal to gracefully shut down the server
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	
+	log.Println("Shutting down server...")
+	
+	// Create a deadline to wait for
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
+	// Doesn't block if no connections, but will otherwise wait until the timeout
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+	
+	log.Println("Server exited gracefully")
 } 

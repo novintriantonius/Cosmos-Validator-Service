@@ -1,9 +1,14 @@
 package models
 
+import (
+	"time"
+)
+
 // DelegationsResponse represents the response from the delegations API
 type DelegationsResponse struct {
 	DelegationResponses []DelegationResponse `json:"delegation_responses"`
 	Pagination          Pagination           `json:"pagination"`
+	Timestamp           time.Time            `json:"timestamp"`
 }
 
 // DelegationResponse represents a single delegation response
@@ -29,4 +34,12 @@ type Balance struct {
 type Pagination struct {
 	NextKey string `json:"next_key"`
 	Total   string `json:"total"`
+}
+
+// StoredDelegationsData represents delegation data stored for a validator
+type StoredDelegationsData struct {
+	ValidatorAddress string              `json:"validator_address"`
+	Data             DelegationsResponse `json:"data"`
+	Timestamp        time.Time           `json:"timestamp"`
+	IsEnabled        bool                `json:"is_enabled"`
 } 
