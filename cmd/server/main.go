@@ -7,7 +7,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/gorilla/mux"
+	"github.com/novintriantonius/cosmos-validator-service/internal/handlers"
+	"github.com/novintriantonius/cosmos-validator-service/internal/store"
 )
 
 // Config holds application configuration
@@ -32,14 +33,11 @@ func main() {
 	// Initialize configuration
 	cfg := NewConfig()
 	
-	// Setup router
-	router := mux.NewRouter()
+	// Initialize validator store
+	validatorStore := store.NewInMemoryValidatorStore()
 	
-	// Health check endpoint
-	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Service is healthy"))
-	}).Methods("GET")
+	// Setup router
+	router := handlers.SetupRouter(validatorStore)
 	
 	// Start server
 	addr := fmt.Sprintf(":%d", cfg.ServerPort)

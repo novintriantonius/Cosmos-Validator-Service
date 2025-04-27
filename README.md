@@ -1,10 +1,11 @@
 # Cosmos Validator Service
 
-A simple HTTP service with a health check endpoint.
+A simple HTTP service with health check and validator management endpoints.
 
 ## Features
 
 - Health check endpoint
+- Validator CRUD operations
 
 ## Requirements
 
@@ -16,7 +17,7 @@ A simple HTTP service with a health check endpoint.
 
 1. Clone the repository:
 ```sh
-git clone https://github.com/novintriantonius/Cosmos-Validator-Service.git
+git clone https://github.com/novintriantonius/cosmos-validator-service.git
 cd cosmos-validator-service
 ```
 
@@ -49,6 +50,98 @@ Response: 200 OK
 ```
 Service is healthy
 ```
+
+### Validator Endpoints
+
+#### Get All Validators
+
+```
+GET /validators
+```
+
+Response: 200 OK
+```json
+{
+  "data": [
+    {
+      "name": "Binance Node",
+      "address": "cosmosvaloper18ruzecmqj9pv8ac0gvkgryuc7u004te9rh7w5s",
+      "enabledTracking": true
+    }
+  ],
+  "count": 1
+}
+```
+
+#### Get Validator by Address
+
+```
+GET /validators/{address}
+```
+
+Response: 200 OK
+```json
+{
+  "name": "Binance Node",
+  "address": "cosmosvaloper18ruzecmqj9pv8ac0gvkgryuc7u004te9rh7w5s",
+  "enabledTracking": true
+}
+```
+
+#### Create Validator
+
+```
+POST /validators
+```
+
+Request body:
+```json
+{
+  "name": "Binance Node",
+  "address": "cosmosvaloper18ruzecmqj9pv8ac0gvkgryuc7u004te9rh7w5s",
+  "enabledTracking": true
+}
+```
+
+Response: 201 Created
+```json
+{
+  "name": "Binance Node",
+  "address": "cosmosvaloper18ruzecmqj9pv8ac0gvkgryuc7u004te9rh7w5s",
+  "enabledTracking": true
+}
+```
+
+#### Update Validator
+
+```
+PUT /validators/{address}
+```
+
+Request body:
+```json
+{
+  "name": "Updated Node Name",
+  "enabledTracking": false
+}
+```
+
+Response: 200 OK
+```json
+{
+  "name": "Updated Node Name",
+  "address": "cosmosvaloper18ruzecmqj9pv8ac0gvkgryuc7u004te9rh7w5s",
+  "enabledTracking": false
+}
+```
+
+#### Delete Validator
+
+```
+DELETE /validators/{address}
+```
+
+Response: 204 No Content
 
 ## Configuration
 
