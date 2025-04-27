@@ -6,147 +6,31 @@ A simple HTTP service with health check and validator management endpoints.
 
 - Health check endpoint
 - Validator CRUD operations
+- Delegations retrieval from Cosmos API
+- Robust error handling with retry mechanism
 
-## Requirements
+## Documentation
 
-- Go 1.20 or higher
+Comprehensive documentation is available in the [docs](docs/) directory:
 
-## Getting Started
+- [Getting Started](docs/getting-started/): Installation and setup
+- [API Documentation](docs/api/): Detailed API reference
+- [Testing](docs/testing/): How to run and write tests
+- [Error Handling](docs/error-handling/): Error handling approach and troubleshooting
 
-### Installation
+## Quick Start
 
-1. Clone the repository:
 ```sh
-git clone https://github.com/novintriantonius/cosmos-validator-service.git
-cd cosmos-validator-service
-```
-
-2. Build the application:
-```sh
+# Build the service
 go build -o cosmos-validator-service cmd/server/main.go
-```
 
-### Running the Service
-
-```sh
+# Run the service
 ./cosmos-validator-service
+
+# Check the health endpoint
+curl http://localhost:8080/health
 ```
 
-The service will start on port 8080 by default. You can change the port by setting the `SERVER_PORT` environment variable:
+## License
 
-```sh
-SERVER_PORT=9000 ./cosmos-validator-service
-```
-
-## API Endpoints
-
-### Health Check
-
-```
-GET /health
-```
-
-Response: 200 OK
-```
-Service is healthy
-```
-
-### Validator Endpoints
-
-#### Get All Validators
-
-```
-GET /validators
-```
-
-Response: 200 OK
-```json
-{
-  "data": [
-    {
-      "name": "Binance Node",
-      "address": "cosmosvaloper18ruzecmqj9pv8ac0gvkgryuc7u004te9rh7w5s",
-      "enabledTracking": true
-    }
-  ],
-  "count": 1
-}
-```
-
-#### Get Validator by Address
-
-```
-GET /validators/{address}
-```
-
-Response: 200 OK
-```json
-{
-  "name": "Binance Node",
-  "address": "cosmosvaloper18ruzecmqj9pv8ac0gvkgryuc7u004te9rh7w5s",
-  "enabledTracking": true
-}
-```
-
-#### Create Validator
-
-```
-POST /validators
-```
-
-Request body:
-```json
-{
-  "name": "Binance Node",
-  "address": "cosmosvaloper18ruzecmqj9pv8ac0gvkgryuc7u004te9rh7w5s",
-  "enabledTracking": true
-}
-```
-
-Response: 201 Created
-```json
-{
-  "name": "Binance Node",
-  "address": "cosmosvaloper18ruzecmqj9pv8ac0gvkgryuc7u004te9rh7w5s",
-  "enabledTracking": true
-}
-```
-
-#### Update Validator
-
-```
-PUT /validators/{address}
-```
-
-Request body:
-```json
-{
-  "name": "Updated Node Name",
-  "enabledTracking": false
-}
-```
-
-Response: 200 OK
-```json
-{
-  "name": "Updated Node Name",
-  "address": "cosmosvaloper18ruzecmqj9pv8ac0gvkgryuc7u004te9rh7w5s",
-  "enabledTracking": false
-}
-```
-
-#### Delete Validator
-
-```
-DELETE /validators/{address}
-```
-
-Response: 204 No Content
-
-## Configuration
-
-The service can be configured using environment variables:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| SERVER_PORT | Port on which the service listens | 8080 | 
+[MIT License](LICENSE) 
