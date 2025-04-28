@@ -20,19 +20,15 @@ go test -v ./tests/unit/store/...
 
 echo -e "${GREEN}✓ Unit Tests Passed${NC}"
 
-# Run E2E tests only if the 'full' argument is provided
-if [ "$1" == "full" ]; then
-  echo -e "${BLUE}Running E2E Tests...${NC}"
-  
-  echo -e "${BLUE}Running Validator E2E Tests${NC}"
-  go test -v ./tests/e2e/validators/...
-  
-  echo -e "${BLUE}Running Delegations E2E Tests${NC}"
-  go test -v ./tests/e2e/delegations/...
-  
-  echo -e "${GREEN}✓ E2E Tests Passed${NC}"
-else
-  echo -e "${BLUE}Skipping E2E tests. Run with 'full' parameter to include E2E tests.${NC}"
-fi
+# Run all E2E tests
+echo -e "${BLUE}Running E2E Tests...${NC}"
+
+echo -e "${BLUE}Running Validator E2E Tests${NC}"
+go test -v ./tests/e2e/validators/...
+
+echo -e "${BLUE}Running Delegations E2E Tests${NC}"
+go test -v ./tests/e2e/delegations/...
+
+echo -e "${GREEN}✓ E2E Tests Passed${NC}"
 
 echo -e "${GREEN}All tests completed successfully!${NC}" 
