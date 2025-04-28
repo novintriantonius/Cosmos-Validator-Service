@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  cosmos-validator:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - COSMOS_API_URL=https://cosmos-api.polkachu.com
+      - COSMOS_CHAIN_ID=cosmoshub-4
+    volumes:
+      - ./config:/app/config
+    restart: unless-stopped 
