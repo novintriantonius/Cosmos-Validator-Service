@@ -1,13 +1,36 @@
 version: '3.8'
 
 services:
-  cosmos-validator:
+  app:
     build: .
     ports:
       - "8080:8080"
     environment:
-      - COSMOS_API_URL=https://cosmos-api.polkachu.com
-      - COSMOS_CHAIN_ID=cosmoshub-4
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=cosmos
+      - DB_PASSWORD=cosmos123
+      - DB_NAME=cosmos_validator
+      - SERVER_PORT=8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=cosmos
+      - POSTGRES_PASSWORD=cosmos123
+      - POSTGRES_DB=cosmos_validator
+    ports:
+      - "5432:5432"
     volumes:
-      - ./config:/app/config
-    restart: unless-stopped 
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cosmos -d cosmos_validator"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data: 

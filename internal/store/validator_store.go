@@ -1,7 +1,9 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/novintriantonius/cosmos-validator-service/internal/models"
@@ -24,82 +26,120 @@ type ValidatorStore interface {
 	Delete(address string) error
 }
 
-// InMemoryValidatorStore implements ValidatorStore with an in-memory storage
-type InMemoryValidatorStore struct {
-	validators map[string]models.Validator
-	mu         sync.RWMutex
+// ValidatorStoreImpl implements ValidatorStore with PostgreSQL storage
+type ValidatorStoreImpl struct {
+	db *sql.DB
+	mu sync.RWMutex
 }
 
-// NewInMemoryValidatorStore creates a new instance of InMemoryValidatorStore
-func NewInMemoryValidatorStore() *InMemoryValidatorStore {
-	return &InMemoryValidatorStore{
-		validators: make(map[string]models.Validator),
+// NewValidatorStore creates a new instance of ValidatorStoreImpl
+func NewValidatorStore(db *sql.DB) *ValidatorStoreImpl {
+	return &ValidatorStoreImpl{
+		db: db,
 	}
 }
 
-// GetAll returns all validators in the store
-func (s *InMemoryValidatorStore) GetAll() ([]models.Validator, error) {
+// GetAll returns all validators from the database
+func (s *ValidatorStoreImpl) GetAll() ([]models.Validator, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
-	validators := make([]models.Validator, 0, len(s.validators))
-	for _, v := range s.validators {
+
+	query := `SELECT address, name, enabled_tracking FROM validators`
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("error querying validators: %v", err)
+	}
+	defer rows.Close()
+
+	var validators []models.Validator
+	for rows.Next() {
+		var v models.Validator
+		if err := rows.Scan(&v.Address, &v.Name, &v.EnabledTracking); err != nil {
+			return nil, fmt.Errorf("error scanning validator row: %v", err)
+		}
 		validators = append(validators, v)
 	}
-	
+
 	return validators, nil
 }
 
 // GetByAddress returns a validator by its address
-func (s *InMemoryValidatorStore) GetByAddress(address string) (models.Validator, error) {
+func (s *ValidatorStoreImpl) GetByAddress(address string) (models.Validator, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
-	validator, exists := s.validators[address]
-	if !exists {
+
+	query := `SELECT address, name, enabled_tracking FROM validators WHERE address = $1`
+	var v models.Validator
+	err := s.db.QueryRow(query, address).Scan(&v.Address, &v.Name, &v.EnabledTracking)
+	if err == sql.ErrNoRows {
 		return models.Validator{}, ErrValidatorNotFound
 	}
-	
-	return validator, nil
+	if err != nil {
+		return models.Validator{}, fmt.Errorf("error querying validator: %v", err)
+	}
+	return v, nil
 }
 
-// Add adds a new validator to the store
-func (s *InMemoryValidatorStore) Add(validator models.Validator) error {
+// Add adds a new validator to the database
+func (s *ValidatorStoreImpl) Add(validator models.Validator) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
-	if _, exists := s.validators[validator.Address]; exists {
-		return ErrValidatorAlreadyExists
+
+	query := `
+		INSERT INTO validators (address, name, enabled_tracking)
+		VALUES ($1, $2, $3)
+	`
+	_, err := s.db.Exec(query, validator.Address, validator.Name, validator.EnabledTracking)
+	if err != nil {
+		return fmt.Errorf("error inserting validator: %v", err)
 	}
-	
-	s.validators[validator.Address] = validator
 	return nil
 }
 
-// Update updates an existing validator in the store
-func (s *InMemoryValidatorStore) Update(address string, validator models.Validator) error {
+// Update updates an existing validator in the database
+func (s *ValidatorStoreImpl) Update(address string, validator models.Validator) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
-	if _, exists := s.validators[address]; !exists {
+
+	query := `
+		UPDATE validators
+		SET name = $1, enabled_tracking = $2, updated_at = CURRENT_TIMESTAMP
+		WHERE address = $3
+	`
+	result, err := s.db.Exec(query, validator.Name, validator.EnabledTracking, address)
+	if err != nil {
+		return fmt.Errorf("error updating validator: %v", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error getting rows affected: %v", err)
+	}
+	if rowsAffected == 0 {
 		return ErrValidatorNotFound
 	}
-	
-	// Ensure the address in the updated validator remains the same
-	validator.Address = address
-	s.validators[address] = validator
+
 	return nil
 }
 
-// Delete removes a validator from the store
-func (s *InMemoryValidatorStore) Delete(address string) error {
+// Delete removes a validator from the database
+func (s *ValidatorStoreImpl) Delete(address string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
-	if _, exists := s.validators[address]; !exists {
+
+	query := `DELETE FROM validators WHERE address = $1`
+	result, err := s.db.Exec(query, address)
+	if err != nil {
+		return fmt.Errorf("error deleting validator: %v", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error getting rows affected: %v", err)
+	}
+	if rowsAffected == 0 {
 		return ErrValidatorNotFound
 	}
-	
-	delete(s.validators, address)
+
 	return nil
 } 

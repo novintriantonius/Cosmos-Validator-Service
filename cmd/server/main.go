@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/novintriantonius/cosmos-validator-service/internal/database"
 	"github.com/novintriantonius/cosmos-validator-service/internal/routes"
 	"github.com/novintriantonius/cosmos-validator-service/internal/scheduler"
 	"github.com/novintriantonius/cosmos-validator-service/internal/services"
@@ -36,9 +37,17 @@ func NewConfig() *Config {
 }
 
 func main() {
-	// Initialize stores
-	validatorStore := store.NewInMemoryValidatorStore()
-	delegationStore := store.NewInMemoryDelegationStore()
+	// Initialize database connection
+	dbConfig := database.NewConfig()
+	db, err := database.Connect(dbConfig)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close()
+
+	// Initialize stores with PostgreSQL
+	validatorStore := store.NewValidatorStore(db)
+	delegationStore := store.NewDelegationStore(db)
 	
 	// Initialize cosmos service
 	cosmosService := services.NewCosmosService()

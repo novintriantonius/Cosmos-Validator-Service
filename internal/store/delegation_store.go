@@ -1,8 +1,9 @@
 package store
 
 import (
+	"database/sql"
+	"encoding/json"
 	"fmt"
-	"reflect"
 	"sync"
 	"time"
 
@@ -30,163 +31,203 @@ type DelegationStore interface {
 	GetEnabledValidators() ([]string, error)
 }
 
-// InMemoryDelegationStore implements the DelegationStore interface with in-memory storage
-type InMemoryDelegationStore struct {
-	delegations map[string]*models.StoredDelegationsData
-	mu          sync.RWMutex
+// DelegationStoreImpl implements the DelegationStore interface with PostgreSQL storage
+type DelegationStoreImpl struct {
+	db *sql.DB
+	mu sync.RWMutex
 }
 
-// NewInMemoryDelegationStore creates a new in-memory delegation store
-func NewInMemoryDelegationStore() *InMemoryDelegationStore {
-	return &InMemoryDelegationStore{
-		delegations: make(map[string]*models.StoredDelegationsData),
+// NewDelegationStore creates a new instance of DelegationStoreImpl
+func NewDelegationStore(db *sql.DB) *DelegationStoreImpl {
+	return &DelegationStoreImpl{
+		db: db,
 	}
 }
 
-// SaveDelegations saves delegations for a validator if the data has changed
-func (s *InMemoryDelegationStore) SaveDelegations(validatorAddress string, data models.DelegationsResponse) error {
+// SaveDelegations saves delegations for a validator
+func (s *DelegationStoreImpl) SaveDelegations(validatorAddress string, data models.DelegationsResponse) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
-	// Check if we already have delegations for this validator
-	stored, exists := s.delegations[validatorAddress]
-	
-	if exists {
-		// Check if the data has actually changed
-		if !hasDelegationsChanged(stored.Data, data) {
-			// Data hasn't changed, only update the last checked timestamp
-			stored.Timestamp = time.Now()
-			return nil
-		}
-		
-		// Update existing record because data has changed
-		stored.Data = data
-		stored.Timestamp = data.Timestamp
-	} else {
-		// Create new record with tracking enabled by default
-		stored = &models.StoredDelegationsData{
-			ValidatorAddress: validatorAddress,
-			Data:             data,
-			Timestamp:        data.Timestamp,
-			IsEnabled:        true,
-		}
-		s.delegations[validatorAddress] = stored
+
+	// Convert data to JSON
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("error marshaling delegations data: %v", err)
 	}
-	
+
+	query := `
+		INSERT INTO delegations (validator_address, data, timestamp, is_enabled)
+		VALUES ($1, $2, $3, true)
+		ON CONFLICT (validator_address)
+		DO UPDATE SET
+			data = $2,
+			timestamp = $3,
+			updated_at = CURRENT_TIMESTAMP
+	`
+
+	_, err = s.db.Exec(query, validatorAddress, jsonData, data.Timestamp)
+	if err != nil {
+		return fmt.Errorf("error saving delegations: %v", err)
+	}
+
 	return nil
 }
 
-// hasDelegationsChanged compares two DelegationsResponse objects to check if there are actual changes
-// Returns true if the delegations data has changed
-func hasDelegationsChanged(old, new models.DelegationsResponse) bool {
-	// If the number of delegations has changed, data has changed
-	if len(old.DelegationResponses) != len(new.DelegationResponses) {
-		return true
-	}
-	
-	// If pagination data has changed, consider it changed
-	if old.Pagination.Total != new.Pagination.Total || old.Pagination.NextKey != new.Pagination.NextKey {
-		return true
-	}
-	
-	// Convert old delegations to a map for faster lookup
-	oldDelegations := make(map[string]models.DelegationResponse, len(old.DelegationResponses))
-	for _, delegation := range old.DelegationResponses {
-		// Use delegator address as a key since it should be unique for a validator
-		oldDelegations[delegation.Delegation.DelegatorAddress] = delegation
-	}
-	
-	// Check if any delegation has changed
-	for _, newDelegation := range new.DelegationResponses {
-		delegatorAddr := newDelegation.Delegation.DelegatorAddress
-		oldDelegation, exists := oldDelegations[delegatorAddr]
-		
-		if !exists {
-			// This is a new delegation
-			return true
-		}
-		
-		// Check if any field has changed
-		if !reflect.DeepEqual(oldDelegation, newDelegation) {
-			return true
-		}
-	}
-	
-	return false
-}
-
 // GetDelegations retrieves delegations for a validator
-func (s *InMemoryDelegationStore) GetDelegations(validatorAddress string) (*models.StoredDelegationsData, error) {
+func (s *DelegationStoreImpl) GetDelegations(validatorAddress string) (*models.StoredDelegationsData, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
-	delegations, exists := s.delegations[validatorAddress]
-	if !exists {
+
+	query := `
+		SELECT data, timestamp, is_enabled
+		FROM delegations
+		WHERE validator_address = $1
+	`
+
+	var (
+		jsonData  []byte
+		stored    models.StoredDelegationsData
+		timestamp sql.NullTime
+	)
+
+	err := s.db.QueryRow(query, validatorAddress).Scan(&jsonData, &timestamp, &stored.IsEnabled)
+	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("no delegations found for validator %s", validatorAddress)
 	}
-	
-	return delegations, nil
+	if err != nil {
+		return nil, fmt.Errorf("error querying delegations: %v", err)
+	}
+
+	// Parse JSON data
+	if err := json.Unmarshal(jsonData, &stored.Data); err != nil {
+		return nil, fmt.Errorf("error unmarshaling delegations data: %v", err)
+	}
+
+	stored.ValidatorAddress = validatorAddress
+	if timestamp.Valid {
+		stored.Timestamp = timestamp.Time
+	}
+
+	return &stored, nil
 }
 
 // GetAllDelegations retrieves all stored delegations
-func (s *InMemoryDelegationStore) GetAllDelegations() (map[string]*models.StoredDelegationsData, error) {
+func (s *DelegationStoreImpl) GetAllDelegations() (map[string]*models.StoredDelegationsData, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
-	// Create a copy to avoid race conditions
-	result := make(map[string]*models.StoredDelegationsData, len(s.delegations))
-	for k, v := range s.delegations {
-		result[k] = v
+
+	query := `
+		SELECT validator_address, data, timestamp, is_enabled
+		FROM delegations
+	`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("error querying all delegations: %v", err)
 	}
-	
-	return result, nil
+	defer rows.Close()
+
+	delegations := make(map[string]*models.StoredDelegationsData)
+	for rows.Next() {
+		var (
+			stored    models.StoredDelegationsData
+			jsonData  []byte
+			timestamp sql.NullTime
+		)
+
+		err := rows.Scan(&stored.ValidatorAddress, &jsonData, &timestamp, &stored.IsEnabled)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning delegation row: %v", err)
+		}
+
+		if err := json.Unmarshal(jsonData, &stored.Data); err != nil {
+			return nil, fmt.Errorf("error unmarshaling delegations data: %v", err)
+		}
+
+		if timestamp.Valid {
+			stored.Timestamp = timestamp.Time
+		}
+
+		delegations[stored.ValidatorAddress] = &stored
+	}
+
+	return delegations, nil
 }
 
 // EnableDelegationTracking enables tracking for a validator
-func (s *InMemoryDelegationStore) EnableDelegationTracking(validatorAddress string) error {
+func (s *DelegationStoreImpl) EnableDelegationTracking(validatorAddress string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
-	delegations, exists := s.delegations[validatorAddress]
-	if !exists {
-		// Create an empty record with tracking enabled
-		delegations = &models.StoredDelegationsData{
-			ValidatorAddress: validatorAddress,
-			IsEnabled:        true,
-		}
-		s.delegations[validatorAddress] = delegations
-	} else {
-		delegations.IsEnabled = true
+
+	query := `
+		INSERT INTO delegations (validator_address, is_enabled, data, timestamp)
+		VALUES ($1, true, '{}', $2)
+		ON CONFLICT (validator_address)
+		DO UPDATE SET
+			is_enabled = true,
+			updated_at = CURRENT_TIMESTAMP
+	`
+
+	_, err := s.db.Exec(query, validatorAddress, time.Now())
+	if err != nil {
+		return fmt.Errorf("error enabling delegation tracking: %v", err)
 	}
-	
+
 	return nil
 }
 
 // DisableDelegationTracking disables tracking for a validator
-func (s *InMemoryDelegationStore) DisableDelegationTracking(validatorAddress string) error {
+func (s *DelegationStoreImpl) DisableDelegationTracking(validatorAddress string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
-	delegations, exists := s.delegations[validatorAddress]
-	if !exists {
-		return fmt.Errorf("no delegations found for validator %s", validatorAddress)
+
+	query := `
+		UPDATE delegations
+		SET is_enabled = false, updated_at = CURRENT_TIMESTAMP
+		WHERE validator_address = $1
+	`
+
+	result, err := s.db.Exec(query, validatorAddress)
+	if err != nil {
+		return fmt.Errorf("error disabling delegation tracking: %v", err)
 	}
-	
-	delegations.IsEnabled = false
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error getting rows affected: %v", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("no validator found with address %s", validatorAddress)
+	}
+
 	return nil
 }
 
 // GetEnabledValidators gets all validators with enabled tracking
-func (s *InMemoryDelegationStore) GetEnabledValidators() ([]string, error) {
+func (s *DelegationStoreImpl) GetEnabledValidators() ([]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
-	var enabledValidators []string
-	for address, delegations := range s.delegations {
-		if delegations.IsEnabled {
-			enabledValidators = append(enabledValidators, address)
-		}
+
+	query := `
+		SELECT validator_address
+		FROM delegations
+		WHERE is_enabled = true
+	`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("error querying enabled validators: %v", err)
 	}
-	
-	return enabledValidators, nil
+	defer rows.Close()
+
+	var validators []string
+	for rows.Next() {
+		var address string
+		if err := rows.Scan(&address); err != nil {
+			return nil, fmt.Errorf("error scanning validator address: %v", err)
+		}
+		validators = append(validators, address)
+	}
+
+	return validators, nil
 } 
