@@ -20,6 +20,7 @@ Comprehensive documentation is available in the [docs](docs/) directory:
 
 ## Quick Start
 
+### Using Go
 ```sh
 # Build the service
 go build -o cosmos-validator-service cmd/server/main.go
@@ -30,6 +31,24 @@ go build -o cosmos-validator-service cmd/server/main.go
 # Check the health endpoint
 curl http://localhost:8080/health
 ```
+
+### Using Docker
+```sh
+# Build and run using Docker Compose
+docker-compose up -d
+
+# Check the health endpoint
+curl http://localhost:8080/health
+
+# To stop the service
+docker-compose down
+```
+
+The Docker setup includes:
+- The main application service
+- PostgreSQL database
+- Automatic health checks
+- Volume persistence for database data
 
 ## License
 
