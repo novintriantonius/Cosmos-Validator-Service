@@ -45,6 +45,11 @@ func main() {
 	}
 	defer db.Close()
 
+	// Run database migrations
+	if err := database.RunMigrations(db); err != nil {
+		log.Fatalf("Failed to run database migrations: %v", err)
+	}
+
 	// Initialize stores with PostgreSQL
 	validatorStore := store.NewValidatorStore(db)
 	delegationStore := store.NewDelegationStore(db)

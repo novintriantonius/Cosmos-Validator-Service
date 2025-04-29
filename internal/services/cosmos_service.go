@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -91,86 +92,51 @@ func (s *CosmosService) GetConfig() CosmosServiceConfig {
 	return s.config
 }
 
-// RetrieveDelegations fetches delegations for a validator from the Cosmos API
-// It includes retry mechanism for transient failures
+// RetrieveDelegations retrieves delegations for a validator
 func (s *CosmosService) RetrieveDelegations(ctx context.Context, validatorAddress string) (*models.DelegationsResponse, error) {
-	if validatorAddress == "" {
-		return nil, fmt.Errorf("validator address cannot be empty")
-	}
+	log.Printf("[DEBUG] Starting RetrieveDelegations for validator %s", validatorAddress)
 	
+	// Build the URL
 	url := fmt.Sprintf("%s/cosmos/staking/v1beta1/validators/%s/delegations", s.config.BaseURL, validatorAddress)
-	
-	var (
-		resp *http.Response
-		err  error
-		reqErr error
-	)
-	
-	// Implement retry mechanism
-	for attempt := 0; attempt <= s.config.MaxRetries; attempt++ {
-		// Create a new request with the context
-		var req *http.Request
-		req, reqErr = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		if reqErr != nil {
-			return nil, fmt.Errorf("failed to create request: %w", reqErr)
-		}
-		
-		// Set appropriate headers
-		req.Header.Set("Accept", "application/json")
-		
-		// Execute the request
-		resp, err = s.client.Do(req)
-		
-		// If no error or non-retryable error, break the loop
-		if err == nil && (resp.StatusCode < 500 || resp.StatusCode == http.StatusNotFound) {
-			break
-		}
-		
-		// If this was the last attempt, return the error
-		if attempt == s.config.MaxRetries {
-			if err != nil {
-				return nil, fmt.Errorf("failed to retrieve delegations after %d attempts: %w", s.config.MaxRetries+1, err)
-			}
-			return nil, fmt.Errorf("failed to retrieve delegations after %d attempts: received status code %d", s.config.MaxRetries+1, resp.StatusCode)
-		}
-		
-		// Close the response body if we received a response
-		if resp != nil {
-			resp.Body.Close()
-		}
-		
-		// Wait before retrying
-		select {
-		case <-ctx.Done():
-			// Context cancelled or timed out
-			return nil, ctx.Err()
-		case <-time.After(s.config.RetryDelay * time.Duration(attempt+1)):
-			// Exponential backoff
-		}
+	log.Printf("[DEBUG] Making request to URL: %s", url)
+
+	// Create request
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		log.Printf("[ERROR] Failed to create request: %v", err)
+		return nil, fmt.Errorf("error creating request: %v", err)
 	}
-	
-	// Handle the response
-	if resp == nil {
-		return nil, fmt.Errorf("unexpected error: nil response after retries")
+
+	// Send request
+	resp, err := s.client.Do(req)
+	if err != nil {
+		log.Printf("[ERROR] Failed to send request: %v", err)
+		return nil, fmt.Errorf("error sending request: %v", err)
 	}
 	defer resp.Body.Close()
-	
-	// Check response status
+
+	// Check status code
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		bodyStr := string(bodyBytes)
-		
-		return nil, fmt.Errorf("API returned non-200 status code: %d, body: %s", resp.StatusCode, bodyStr)
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("[ERROR] Unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
-	
-	// Parse the response
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[ERROR] Failed to read response body: %v", err)
+		return nil, fmt.Errorf("error reading response body: %v", err)
+	}
+	log.Printf("[DEBUG] Received response body: %s", string(body))
+
+	// Parse response
 	var delegationsResp models.DelegationsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&delegationsResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	if err := json.Unmarshal(body, &delegationsResp); err != nil {
+		log.Printf("[ERROR] Failed to parse response: %v", err)
+		return nil, fmt.Errorf("error parsing response: %v", err)
 	}
-	
-	// Add timestamp
-	delegationsResp.Timestamp = time.Now()
-	
+
+	log.Printf("[DEBUG] Successfully parsed %d delegations", len(delegationsResp.DelegationResponses))
 	return &delegationsResp, nil
 } 

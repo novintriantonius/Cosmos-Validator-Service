@@ -97,13 +97,12 @@ func TestDelegationStore_SaveDelegations(t *testing.T) {
 			NextKey: "next",
 			Total:   "1",
 		},
-		Timestamp: time.Now(),
 	}
 
 	jsonData, _ := json.Marshal(delegations)
 
 	mock.ExpectExec("INSERT INTO delegations").
-		WithArgs("validator1", jsonData, delegations.Timestamp).
+		WithArgs("validator1", jsonData).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	err := store.SaveDelegations("validator1", delegations)
@@ -135,15 +134,14 @@ func TestDelegationStore_GetDelegations(t *testing.T) {
 			NextKey: "next",
 			Total:   "1",
 		},
-		Timestamp: time.Now(),
 	}
 
 	jsonData, _ := json.Marshal(delegations)
 
-	rows := sqlmock.NewRows([]string{"data", "timestamp", "is_enabled"}).
-		AddRow(jsonData, delegations.Timestamp, true)
+	rows := sqlmock.NewRows([]string{"data", "is_enabled"}).
+		AddRow(jsonData, true)
 
-	mock.ExpectQuery("SELECT data, timestamp, is_enabled FROM delegations WHERE validator_address = \\$1").
+	mock.ExpectQuery("SELECT data, is_enabled FROM delegations WHERE validator_address = \\$1").
 		WithArgs("validator1").
 		WillReturnRows(rows)
 
@@ -151,7 +149,6 @@ func TestDelegationStore_GetDelegations(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "validator1", stored.ValidatorAddress)
 	assert.True(t, stored.IsEnabled)
-	assert.Equal(t, delegations.Timestamp, stored.Timestamp)
 	assert.Len(t, stored.Data.DelegationResponses, 1)
 }
 

@@ -1,24 +1,99 @@
 package routes
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/mux"
 	"github.com/novintriantonius/cosmos-validator-service/internal/models"
 	"github.com/novintriantonius/cosmos-validator-service/internal/store"
 )
 
-// ValidatorHandler handles HTTP requests for validator endpoints
+// ValidatorHandler handles validator-related HTTP requests
 type ValidatorHandler struct {
 	store store.ValidatorStore
 }
 
-// NewValidatorHandler creates a new instance of ValidatorHandler
+// NewValidatorHandler creates a new validator handler
 func NewValidatorHandler(store store.ValidatorStore) *ValidatorHandler {
-	return &ValidatorHandler{
-		store: store,
+	return &ValidatorHandler{store: store}
+}
+
+// GetValidators returns all validators
+func (h *ValidatorHandler) GetValidators(c *gin.Context) {
+	validators, err := h.store.GetAll()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
+	c.JSON(http.StatusOK, validators)
+}
+
+// GetValidator returns a validator by address
+func (h *ValidatorHandler) GetValidator(c *gin.Context) {
+	address := c.Param("address")
+	validator, err := h.store.GetByAddress(address)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "validator not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, validator)
+}
+
+// CreateValidator creates a new validator
+func (h *ValidatorHandler) CreateValidator(c *gin.Context) {
+	var validator models.Validator
+	if err := c.ShouldBindJSON(&validator); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.store.Save(&validator); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, validator)
+}
+
+// UpdateValidator updates a validator
+func (h *ValidatorHandler) UpdateValidator(c *gin.Context) {
+	address := c.Param("address")
+	var validator models.Validator
+	if err := c.ShouldBindJSON(&validator); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Ensure the address in the URL matches the validator
+	validator.Address = address
+
+	if err := h.store.Save(&validator); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, validator)
+}
+
+// DeleteValidator deletes a validator
+func (h *ValidatorHandler) DeleteValidator(c *gin.Context) {
+	address := c.Param("address")
+	validator := &models.Validator{Address: address}
+
+	if err := h.store.Save(validator); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
 // GetAll handles GET /validators

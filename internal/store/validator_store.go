@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 
 	"github.com/novintriantonius/cosmos-validator-service/internal/models"
@@ -17,10 +18,12 @@ var (
 	ErrValidatorAlreadyExists = errors.New("validator with this address already exists")
 )
 
-// ValidatorStore provides an interface for validator data operations
+// ValidatorStore defines the interface for validator storage operations
 type ValidatorStore interface {
 	GetAll() ([]models.Validator, error)
-	GetByAddress(address string) (models.Validator, error)
+	GetByAddress(address string) (*models.Validator, error)
+	Save(validator *models.Validator) error
+	GetEnabledValidators() ([]string, error)
 	Add(validator models.Validator) error
 	Update(address string, validator models.Validator) error
 	Delete(address string) error
@@ -64,7 +67,7 @@ func (s *ValidatorStoreImpl) GetAll() ([]models.Validator, error) {
 }
 
 // GetByAddress returns a validator by its address
-func (s *ValidatorStoreImpl) GetByAddress(address string) (models.Validator, error) {
+func (s *ValidatorStoreImpl) GetByAddress(address string) (*models.Validator, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -72,12 +75,12 @@ func (s *ValidatorStoreImpl) GetByAddress(address string) (models.Validator, err
 	var v models.Validator
 	err := s.db.QueryRow(query, address).Scan(&v.Address, &v.Name, &v.EnabledTracking)
 	if err == sql.ErrNoRows {
-		return models.Validator{}, ErrValidatorNotFound
+		return nil, ErrValidatorNotFound
 	}
 	if err != nil {
-		return models.Validator{}, fmt.Errorf("error querying validator: %v", err)
+		return nil, fmt.Errorf("error querying validator: %v", err)
 	}
-	return v, nil
+	return &v, nil
 }
 
 // Add adds a new validator to the database
@@ -139,6 +142,73 @@ func (s *ValidatorStoreImpl) Delete(address string) error {
 	}
 	if rowsAffected == 0 {
 		return ErrValidatorNotFound
+	}
+
+	return nil
+}
+
+// GetEnabledValidators returns a list of validator addresses that have enabled tracking
+func (s *ValidatorStoreImpl) GetEnabledValidators() ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	query := `
+		SELECT address 
+		FROM validators 
+		WHERE enabled_tracking = true
+	`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		log.Printf("[ERROR] Failed to query enabled validators: %v", err)
+		return nil, fmt.Errorf("error querying enabled validators: %v", err)
+	}
+	defer rows.Close()
+
+	var addresses []string
+	for rows.Next() {
+		var address string
+		if err := rows.Scan(&address); err != nil {
+			log.Printf("[ERROR] Failed to scan validator row: %v", err)
+			return nil, fmt.Errorf("error scanning validator row: %v", err)
+		}
+		addresses = append(addresses, address)
+	}
+
+	log.Printf("[DEBUG] Found %d enabled validators", len(addresses))
+	return addresses, nil
+}
+
+// Save saves a validator to the database
+func (s *ValidatorStoreImpl) Save(validator *models.Validator) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check if validator already exists
+	_, err := s.GetByAddress(validator.Address)
+	if err == nil {
+		// Update existing validator
+		query := `
+			UPDATE validators
+			SET name = $1, enabled_tracking = $2, updated_at = CURRENT_TIMESTAMP
+			WHERE address = $3
+		`
+		_, err := s.db.Exec(query, validator.Name, validator.EnabledTracking, validator.Address)
+		if err != nil {
+			return fmt.Errorf("error updating validator: %v", err)
+		}
+	} else if err == ErrValidatorNotFound {
+		// Insert new validator
+		query := `
+			INSERT INTO validators (address, name, enabled_tracking)
+			VALUES ($1, $2, $3)
+		`
+		_, err := s.db.Exec(query, validator.Address, validator.Name, validator.EnabledTracking)
+		if err != nil {
+			return fmt.Errorf("error inserting validator: %v", err)
+		}
+	} else {
+		return fmt.Errorf("error checking validator existence: %v", err)
 	}
 
 	return nil

@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/novintriantonius/cosmos-validator-service/internal/services"
 	"github.com/novintriantonius/cosmos-validator-service/internal/store"
 	"github.com/novintriantonius/cosmos-validator-service/internal/tasks"
+	"github.com/robfig/cron/v3"
 )
 
 // RegisterDelegationTasks registers all delegation-related tasks with the scheduler
@@ -29,8 +31,10 @@ func RegisterDelegationTasks(
 	// Cron format: second minute hour day month weekday
 	sched.AddCustomScheduleTask(
 		"hourly-validator-delegations-sync",
-		"0 0 * * * *", // Run at minute 0 of every hour
-		delegationSyncTask.SyncEnabledValidatorDelegations,
+		"0 * * * * *", // Run at minute 0 of every hour
+		func(ctx context.Context) error {
+			return delegationSyncTask.SyncEnabledValidatorDelegations(ctx)
+		},
 	)
 	
 	log.Println("Scheduled hourly delegation sync task to run at the start of every hour")
@@ -50,4 +54,36 @@ func RegisterDelegationTasks(
 			log.Println("Initial delegation sync completed successfully")
 		}
 	}()
+}
+
+// ScheduleDelegationSync schedules the delegation sync task
+func ScheduleDelegationSync(delegationSyncTask *tasks.DelegationSyncTask) error {
+	c := cron.New()
+
+	// Schedule task to run at the start of every hour
+	_, err := c.AddFunc("0 * * * *", func() {
+		log.Printf("Running hourly delegation sync...")
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		if err := delegationSyncTask.SyncEnabledValidatorDelegations(ctx); err != nil {
+			log.Printf("Error syncing delegations: %v", err)
+		}
+	})
+	if err != nil {
+		return fmt.Errorf("error scheduling delegation sync: %v", err)
+	}
+
+	// Also run immediately on startup
+	log.Printf("Running initial delegation sync...")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	if err := delegationSyncTask.SyncEnabledValidatorDelegations(ctx); err != nil {
+		log.Printf("Error running initial delegation sync: %v", err)
+	}
+
+	// Start the scheduler in a goroutine
+	go c.Start()
+
+	log.Printf("Scheduled hourly delegation sync task to run at the start of every hour")
+	return nil
 } 

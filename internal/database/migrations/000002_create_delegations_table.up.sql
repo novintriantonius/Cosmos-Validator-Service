@@ -1,8 +1,10 @@
+DROP TABLE IF EXISTS delegations;
+
 CREATE TABLE IF NOT EXISTS delegations (
-    validator_address VARCHAR(255) PRIMARY KEY REFERENCES validators(address) ON DELETE CASCADE,
-    data JSONB NOT NULL,
-    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-    is_enabled BOOLEAN NOT NULL DEFAULT true,
+    id SERIAL PRIMARY KEY,
+    validator_address VARCHAR(255) NOT NULL REFERENCES validators(address) ON DELETE CASCADE,
+    delegator_address VARCHAR(255) NOT NULL,
+    delegation_shares VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 ); 
