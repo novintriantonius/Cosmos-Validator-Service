@@ -29,14 +29,7 @@ func SetupRouter(validatorStore store.ValidatorStore, delegationStore store.Dele
 	apiRouter.HandleFunc("/validators/{validator_address}/delegations/hourly", delegationHandler.GetHourlyDelegations).Methods("GET")
 	apiRouter.HandleFunc("/validators/{validator_address}/delegations/daily", delegationHandler.GetDailyDelegations).Methods("GET")
 	apiRouter.HandleFunc("/validators/{validator_address}/delegator/{delegator_address}/history", delegationHandler.GetDelegatorHistory).Methods("GET")
-	
-	// Legacy routes (for backward compatibility)
-	router.HandleFunc("/validators", validatorHandler.GetAll).Methods("GET")
-	router.HandleFunc("/validators/{address}", validatorHandler.GetByAddress).Methods("GET")
-	router.HandleFunc("/validators", validatorHandler.Create).Methods("POST")
-	router.HandleFunc("/validators/{address}", validatorHandler.Update).Methods("PUT")
-	router.HandleFunc("/validators/{address}", validatorHandler.Delete).Methods("DELETE")
-	
+
 	// Health check endpoint
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

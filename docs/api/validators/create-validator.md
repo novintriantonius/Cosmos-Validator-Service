@@ -92,7 +92,7 @@ Validator with this address already exists
 
 ```bash
 curl -X POST \
-  http://localhost:8080/validators \
+  http://localhost:8080/api/v1/validators \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Binance Node",

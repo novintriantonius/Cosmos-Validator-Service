@@ -57,7 +57,7 @@ Validator not found
 ## Sample Call
 
 ```bash
-curl -X GET http://localhost:8080/validators/cosmosvaloper18ruzecmqj9pv8ac0gvkgryuc7u004te9rh7w5s
+curl -X GET http://localhost:8080/api/v1/validators/cosmosvaloper18ruzecmqj9pv8ac0gvkgryuc7u004te9rh7w5s
 ```
 
 ## Notes

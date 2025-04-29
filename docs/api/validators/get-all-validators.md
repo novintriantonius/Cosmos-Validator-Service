@@ -61,7 +61,7 @@ None required.
 ## Sample Call
 
 ```bash
-curl -X GET http://localhost:8080/validators
+curl -X GET http://localhost:8080/api/v1/validators
 ```
 
 ## Notes
