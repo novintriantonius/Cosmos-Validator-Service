@@ -2,7 +2,6 @@ package routes
 
 import (
 	"net/http"
-
 	"github.com/gorilla/mux"
 	"github.com/novintriantonius/cosmos-validator-service/internal/services"
 	"github.com/novintriantonius/cosmos-validator-service/internal/store"
