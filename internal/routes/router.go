@@ -8,13 +8,29 @@ import (
 )
 
 // SetupRouter configures all the routes for the application
-func SetupRouter(validatorStore store.ValidatorStore, cosmosService *services.CosmosService) *mux.Router {
+func SetupRouter(validatorStore store.ValidatorStore, delegationStore store.DelegationStore, cosmosService *services.CosmosService) *mux.Router {
 	router := mux.NewRouter()
 	
 	// Create handler instances
 	validatorHandler := NewValidatorHandler(validatorStore)
+	delegationHandler := NewDelegationHandler(delegationStore)
+	
+	// API routes
+	apiRouter := router.PathPrefix("/api/v1").Subrouter()
 	
 	// Validator routes
+	apiRouter.HandleFunc("/validators", validatorHandler.GetAll).Methods("GET")
+	apiRouter.HandleFunc("/validators/{address}", validatorHandler.GetByAddress).Methods("GET")
+	apiRouter.HandleFunc("/validators", validatorHandler.Create).Methods("POST")
+	apiRouter.HandleFunc("/validators/{address}", validatorHandler.Update).Methods("PUT")
+	apiRouter.HandleFunc("/validators/{address}", validatorHandler.Delete).Methods("DELETE")
+	
+	// Delegation routes
+	apiRouter.HandleFunc("/validators/{validator_address}/delegations/hourly", delegationHandler.GetHourlyDelegations).Methods("GET")
+	apiRouter.HandleFunc("/validators/{validator_address}/delegations/daily", delegationHandler.GetDailyDelegations).Methods("GET")
+	apiRouter.HandleFunc("/validators/{validator_address}/delegator/{delegator_address}/history", delegationHandler.GetDelegatorHistory).Methods("GET")
+	
+	// Legacy routes (for backward compatibility)
 	router.HandleFunc("/validators", validatorHandler.GetAll).Methods("GET")
 	router.HandleFunc("/validators/{address}", validatorHandler.GetByAddress).Methods("GET")
 	router.HandleFunc("/validators", validatorHandler.Create).Methods("POST")

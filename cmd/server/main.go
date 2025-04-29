@@ -58,7 +58,7 @@ func main() {
 	cosmosService := services.NewCosmosService()
 	
 	// Set up router with all dependencies
-	router := routes.SetupRouter(validatorStore, cosmosService)
+	router := routes.SetupRouter(validatorStore, delegationStore, cosmosService)
 	
 	// Initialize and setup scheduler with all tasks
 	sched := scheduler.SetupScheduler(validatorStore, delegationStore, cosmosService)
