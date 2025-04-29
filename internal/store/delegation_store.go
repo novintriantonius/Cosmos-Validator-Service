@@ -20,12 +20,6 @@ type DelegationStore interface {
 	// GetAllDelegations retrieves all stored delegations
 	GetAllDelegations() (map[string][]models.Delegation, error)
 	
-	// EnableDelegationTracking enables tracking for a validator
-	EnableDelegationTracking(validatorAddress string) error
-	
-	// DisableDelegationTracking disables tracking for a validator
-	DisableDelegationTracking(validatorAddress string) error
-	
 	// GetEnabledValidators gets all validators with enabled tracking
 	GetEnabledValidators() ([]string, error)
 
@@ -239,38 +233,6 @@ func (s *DelegationStoreImpl) GetAllDelegations() (map[string][]models.Delegatio
 	}
 
 	return delegations, nil
-}
-
-// EnableDelegationTracking enables tracking for a validator
-func (s *DelegationStoreImpl) EnableDelegationTracking(validatorAddress string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// No need to do anything as tracking is implicit in the presence of delegations
-	return nil
-}
-
-// DisableDelegationTracking disables tracking for a validator
-func (s *DelegationStoreImpl) DisableDelegationTracking(validatorAddress string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Delete all delegations for the validator
-	query := `DELETE FROM delegations WHERE validator_address = $1`
-	result, err := s.db.Exec(query, validatorAddress)
-	if err != nil {
-		return fmt.Errorf("error deleting delegations: %v", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("error getting rows affected: %v", err)
-	}
-	if rowsAffected == 0 {
-		return fmt.Errorf("no delegations found for validator %s", validatorAddress)
-	}
-
-	return nil
 }
 
 // GetEnabledValidators gets all validators with enabled tracking

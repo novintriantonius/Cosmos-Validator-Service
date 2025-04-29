@@ -22,7 +22,6 @@ var (
 type ValidatorStore interface {
 	GetAll() ([]models.Validator, error)
 	GetByAddress(address string) (*models.Validator, error)
-	Save(validator *models.Validator) error
 	GetEnabledValidators() ([]string, error)
 	Add(validator models.Validator) error
 	Update(address string, validator models.Validator) error
@@ -177,39 +176,4 @@ func (s *ValidatorStoreImpl) GetEnabledValidators() ([]string, error) {
 
 	log.Printf("[DEBUG] Found %d enabled validators", len(addresses))
 	return addresses, nil
-}
-
-// Save saves a validator to the database
-func (s *ValidatorStoreImpl) Save(validator *models.Validator) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Check if validator already exists
-	_, err := s.GetByAddress(validator.Address)
-	if err == nil {
-		// Update existing validator
-		query := `
-			UPDATE validators
-			SET name = $1, enabled_tracking = $2, updated_at = CURRENT_TIMESTAMP
-			WHERE address = $3
-		`
-		_, err := s.db.Exec(query, validator.Name, validator.EnabledTracking, validator.Address)
-		if err != nil {
-			return fmt.Errorf("error updating validator: %v", err)
-		}
-	} else if err == ErrValidatorNotFound {
-		// Insert new validator
-		query := `
-			INSERT INTO validators (address, name, enabled_tracking)
-			VALUES ($1, $2, $3)
-		`
-		_, err := s.db.Exec(query, validator.Address, validator.Name, validator.EnabledTracking)
-		if err != nil {
-			return fmt.Errorf("error inserting validator: %v", err)
-		}
-	} else {
-		return fmt.Errorf("error checking validator existence: %v", err)
-	}
-
-	return nil
 } 
